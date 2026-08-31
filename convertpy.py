@@ -94,6 +94,21 @@ def parse_single_usfm(raw_text):
 
     return book_id, {"book_name": book_name, "chapters": chapters}
 
+def merge_bible_dicts(dict_list):
+    """Merge multiple bible dictionaries into one"""
+    merged = {}
+    for bible_dict in dict_list:
+        for code, book_info in bible_dict.items():
+            if code not in merged:
+                merged[code] = book_info
+            else:
+                # If book already exists, merge chapters
+                existing_chapters = merged[code].get("chapters", {})
+                new_chapters = book_info.get("chapters", {})
+                existing_chapters.update(new_chapters)
+                merged[code]["chapters"] = existing_chapters
+    return merged
+
 def build_sqlite_from_dict(bible_dict, output_path):
     conn = sqlite3.connect(output_path)
     cur = conn.cursor()
@@ -165,7 +180,7 @@ def build_sqlite_from_dict(bible_dict, output_path):
     return total_verses
 
 # UI Setup
-tab1, tab2 = st.tabs(["Upload JSON File", "Upload USFM Files"])
+tab1, tab2, tab3 = st.tabs(["Upload JSON File", "Upload Multiple JSON Files", "Upload USFM Files"])
 
 with tab1:
     st.subheader("Convert `tamil_bible_combined.json` to Compact SQLite")
@@ -193,6 +208,53 @@ with tab1:
             )
 
 with tab2:
+    st.subheader("Convert Multiple JSON Files to Single Compact SQLite")
+    st.write("Upload multiple JSON files to merge them into one database file.")
+    json_files = st.file_uploader(
+        "Upload multiple JSON files", 
+        accept_multiple_files=True, 
+        type=["json"], 
+        key="multi_json_uploader"
+    )
+
+    if json_files and st.button("Generate tamil_bible.db from Multiple JSON Files"):
+        with st.spinner("Loading and merging JSON files..."):
+            try:
+                bible_dicts = []
+                files_loaded = 0
+                
+                for json_file in json_files:
+                    bible_data = json.load(json_file)
+                    bible_dicts.append(bible_data)
+                    files_loaded += 1
+                
+                st.info(f"📂 Loaded {files_loaded} JSON file(s)")
+                
+                # Merge all dictionaries
+                merged_bible_data = merge_bible_dicts(bible_dicts)
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
+                    tmp_path = tmp.name
+
+                total = build_sqlite_from_dict(merged_bible_data, tmp_path)
+
+                with open(tmp_path, "rb") as f:
+                    db_bytes = f.read()
+                os.remove(tmp_path)
+
+                st.success(f"✅ Generated compact SQLite DB ({len(db_bytes) / (1024*1024):.2f} MB) with {total:,} verses from {files_loaded} JSON file(s)!")
+                st.download_button(
+                    label="⬇️ Download Merged tamil_bible.db",
+                    data=db_bytes,
+                    file_name="tamil_bible.db",
+                    mime="application/x-sqlite3"
+                )
+            except json.JSONDecodeError as e:
+                st.error(f"❌ Error parsing JSON: {e}")
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
+
+with tab3:
     st.subheader("Convert raw USFM files directly to Compact SQLite")
     usfm_files = st.file_uploader(
         "Upload all .usfm / .SFM files", 
