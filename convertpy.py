@@ -37,14 +37,12 @@ CANON_ORDER = [
 CODE_TO_CANON = {code: (idx + 1, name, test) for idx, (code, name, test) in enumerate(CANON_ORDER)}
 
 def clean_usfm_text(raw_text):
-    """Strips footnotes, cross-references, and inline USFM markers cleanly."""
     clean = re.sub(r"\\f\s*\+.*?\s*\\f\*", "", raw_text)
     clean = re.sub(r"\\x\s*\+.*?\s*\\x\*", "", clean)
     clean = re.sub(r"\\[a-zA-Z0-9]+(\s+)?", " ", clean)
     return re.sub(r"\s+", " ", clean).strip()
 
 def parse_single_usfm(raw_text):
-    """Parses raw USFM string into structured data without nested-scope issues."""
     lines = raw_text.splitlines()
     book_id = "UNKNOWN"
     book_name = ""
@@ -97,9 +95,14 @@ def parse_single_usfm(raw_text):
     return book_id, {"book_name": book_name, "chapters": chapters}
 
 def build_sqlite_from_dict(bible_dict, output_path):
-    """Builds and indexes the SQLite database with safe transaction commits."""
     conn = sqlite3.connect(output_path)
     cur = conn.cursor()
+
+    # Storage optimization pragmas
+    cur.execute("PRAGMA page_size = 4096;")
+    cur.execute("PRAGMA auto_vacuum = FULL;")
+    cur.execute("PRAGMA synchronous = OFF;")
+    cur.execute("PRAGMA journal_mode = MEMORY;")
 
     cur.execute("""
         CREATE TABLE books (
@@ -121,7 +124,6 @@ def build_sqlite_from_dict(bible_dict, output_path):
         );
     """)
 
-    # Pre-populate canonical books table
     for code, name, testament in CANON_ORDER:
         b_id = CODE_TO_CANON[code][0]
         cur.execute("INSERT INTO books VALUES (?, ?, ?, ?)", (b_id, code, name, testament))
@@ -149,29 +151,28 @@ def build_sqlite_from_dict(bible_dict, output_path):
                     )
                     total_verses += 1
 
-    # 1. Commit inserted rows first
     conn.commit()
 
-    # 2. Build indexes and Full-Text Search table
+    # Create primary lookup index
     cur.execute("CREATE INDEX idx_book_chapter ON verses(book_id, chapter);")
-    cur.execute("CREATE VIRTUAL TABLE verses_fts USING fts5(text_ta, content='verses', content_rowid='id');")
-    cur.execute("INSERT INTO verses_fts(verses_fts) VALUES('rebuild');")
+    conn.commit()
 
-    # 3. Final commit and close
+    # Reclaim unused allocation pages
+    cur.execute("VACUUM;")
     conn.commit()
     conn.close()
 
     return total_verses
 
-# Streamlit Tabs
+# UI Setup
 tab1, tab2 = st.tabs(["Upload JSON File", "Upload USFM Files"])
 
 with tab1:
-    st.subheader("Convert `tamil_bible_combined.json` to SQLite")
+    st.subheader("Convert `tamil_bible_combined.json` to Compact SQLite")
     json_file = st.file_uploader("Upload your JSON file", type=["json"], key="json_uploader")
 
     if json_file and st.button("Generate tamil_bible.db from JSON"):
-        with st.spinner("Processing JSON and generating SQLite database..."):
+        with st.spinner("Compiling and shrinking SQLite database..."):
             bible_data = json.load(json_file)
             
             with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
@@ -183,16 +184,16 @@ with tab1:
                 db_bytes = f.read()
             os.remove(tmp_path)
 
-            st.success(f"✅ Generated SQLite DB with {total:,} verses!")
+            st.success(f"✅ Generated compact SQLite DB ({len(db_bytes) / (1024*1024):.2f} MB) with {total:,} verses!")
             st.download_button(
-                label="⬇️ Download tamil_bible.db",
+                label="⬇️ Download Optimized tamil_bible.db",
                 data=db_bytes,
                 file_name="tamil_bible.db",
                 mime="application/x-sqlite3"
             )
 
 with tab2:
-    st.subheader("Convert raw USFM files directly to SQLite")
+    st.subheader("Convert raw USFM files directly to Compact SQLite")
     usfm_files = st.file_uploader(
         "Upload all .usfm / .SFM files", 
         accept_multiple_files=True, 
@@ -201,7 +202,7 @@ with tab2:
     )
 
     if usfm_files and st.button("Generate tamil_bible.db from USFM"):
-        with st.spinner("Parsing USFM files..."):
+        with st.spinner("Parsing USFM files and building SQLite database..."):
             intermediate_dict = {}
             for file in usfm_files:
                 raw_text = file.read().decode("utf-8", errors="ignore")
@@ -217,9 +218,9 @@ with tab2:
                 db_bytes = f.read()
             os.remove(tmp_path)
 
-            st.success(f"✅ Generated SQLite DB with {total:,} verses!")
+            st.success(f"✅ Generated compact SQLite DB ({len(db_bytes) / (1024*1024):.2f} MB) with {total:,} verses!")
             st.download_button(
-                label="⬇️ Download tamil_bible.db",
+                label="⬇️ Download Optimized tamil_bible.db",
                 data=db_bytes,
                 file_name="tamil_bible.db",
                 mime="application/x-sqlite3"
