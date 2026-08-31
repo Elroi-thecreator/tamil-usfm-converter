@@ -37,12 +37,14 @@ CANON_ORDER = [
 CODE_TO_CANON = {code: (idx + 1, name, test) for idx, (code, name, test) in enumerate(CANON_ORDER)}
 
 def clean_usfm_text(raw_text):
+    """Strips footnotes, cross-references, and inline USFM markers cleanly."""
     clean = re.sub(r"\\f\s*\+.*?\s*\\f\*", "", raw_text)
+    clean = re.sub(r"\\x\s*\+.*?\s*\\x\*", "", clean)
     clean = re.sub(r"\\[a-zA-Z0-9]+(\s+)?", " ", clean)
     return re.sub(r"\s+", " ", clean).strip()
 
 def parse_single_usfm(raw_text):
-    """Parses raw USFM string into a structured dictionary without scope issues."""
+    """Parses raw USFM string into structured data without nested-scope issues."""
     lines = raw_text.splitlines()
     book_id = "UNKNOWN"
     book_name = ""
@@ -62,7 +64,6 @@ def parse_single_usfm(raw_text):
             if not book_name:
                 book_name = line.split(maxsplit=1)[1]
         elif line.startswith("\\c "):
-            # Save previous verse
             if current_chapter and current_verse and current_text:
                 chapters[current_chapter][current_verse] = clean_usfm_text("".join(current_text))
                 current_text = []
@@ -73,7 +74,6 @@ def parse_single_usfm(raw_text):
                 chapters[current_chapter] = {}
                 current_verse = None
         elif line.startswith("\\v "):
-            # Save previous verse
             if current_chapter and current_verse and current_text:
                 chapters[current_chapter][current_verse] = clean_usfm_text("".join(current_text))
                 current_text = []
@@ -91,13 +91,13 @@ def parse_single_usfm(raw_text):
             elif not line.startswith("\\"):
                 current_text.append(" " + line)
 
-    # Save last verse in file
     if current_chapter and current_verse and current_text:
         chapters[current_chapter][current_verse] = clean_usfm_text("".join(current_text))
 
     return book_id, {"book_name": book_name, "chapters": chapters}
 
 def build_sqlite_from_dict(bible_dict, output_path):
+    """Builds and indexes the SQLite database with safe transaction commits."""
     conn = sqlite3.connect(output_path)
     cur = conn.cursor()
 
@@ -121,6 +121,7 @@ def build_sqlite_from_dict(bible_dict, output_path):
         );
     """)
 
+    # Pre-populate canonical books table
     for code, name, testament in CANON_ORDER:
         b_id = CODE_TO_CANON[code][0]
         cur.execute("INSERT INTO books VALUES (?, ?, ?, ?)", (b_id, code, name, testament))
@@ -148,16 +149,21 @@ def build_sqlite_from_dict(bible_dict, output_path):
                     )
                     total_verses += 1
 
+    # 1. Commit inserted rows first
+    conn.commit()
+
+    # 2. Build indexes and Full-Text Search table
     cur.execute("CREATE INDEX idx_book_chapter ON verses(book_id, chapter);")
     cur.execute("CREATE VIRTUAL TABLE verses_fts USING fts5(text_ta, content='verses', content_rowid='id');")
     cur.execute("INSERT INTO verses_fts(verses_fts) VALUES('rebuild');")
-    cur.execute("VACUUM;")
 
+    # 3. Final commit and close
     conn.commit()
     conn.close()
+
     return total_verses
 
-# UI Setup
+# Streamlit Tabs
 tab1, tab2 = st.tabs(["Upload JSON File", "Upload USFM Files"])
 
 with tab1:
