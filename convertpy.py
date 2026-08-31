@@ -41,7 +41,63 @@ def clean_usfm_text(raw_text):
     clean = re.sub(r"\\[a-zA-Z0-9]+(\s+)?", " ", clean)
     return re.sub(r"\s+", " ", clean).strip()
 
-def build_sqlite_from_json(json_data, output_path):
+def parse_single_usfm(raw_text):
+    """Parses raw USFM string into a structured dictionary without scope issues."""
+    lines = raw_text.splitlines()
+    book_id = "UNKNOWN"
+    book_name = ""
+    chapters = {}
+    current_chapter = None
+    current_verse = None
+    current_text = []
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        if line.startswith("\\id "):
+            book_id = line.split()[1].upper()[:3]
+        elif line.startswith("\\h ") or line.startswith("\\toc1 "):
+            if not book_name:
+                book_name = line.split(maxsplit=1)[1]
+        elif line.startswith("\\c "):
+            # Save previous verse
+            if current_chapter and current_verse and current_text:
+                chapters[current_chapter][current_verse] = clean_usfm_text("".join(current_text))
+                current_text = []
+
+            match = re.match(r"\\c\s+(\d+)", line)
+            if match:
+                current_chapter = match.group(1)
+                chapters[current_chapter] = {}
+                current_verse = None
+        elif line.startswith("\\v "):
+            # Save previous verse
+            if current_chapter and current_verse and current_text:
+                chapters[current_chapter][current_verse] = clean_usfm_text("".join(current_text))
+                current_text = []
+
+            match = re.match(r"\\v\s+(\d+)\s*(.*)", line)
+            if match:
+                current_verse = match.group(1)
+                if match.group(2):
+                    current_text = [match.group(2)]
+        elif current_verse is not None and not line.startswith("\\s") and not line.startswith("\\is"):
+            if line.startswith("\\q") or line.startswith("\\p"):
+                content_part = re.sub(r"^\\[a-zA-Z0-9]+\s*", "", line)
+                if content_part:
+                    current_text.append(" " + content_part)
+            elif not line.startswith("\\"):
+                current_text.append(" " + line)
+
+    # Save last verse in file
+    if current_chapter and current_verse and current_text:
+        chapters[current_chapter][current_verse] = clean_usfm_text("".join(current_text))
+
+    return book_id, {"book_name": book_name, "chapters": chapters}
+
+def build_sqlite_from_dict(bible_dict, output_path):
     conn = sqlite3.connect(output_path)
     cur = conn.cursor()
 
@@ -65,13 +121,12 @@ def build_sqlite_from_json(json_data, output_path):
         );
     """)
 
-    # Populate canonical books
     for code, name, testament in CANON_ORDER:
         b_id = CODE_TO_CANON[code][0]
         cur.execute("INSERT INTO books VALUES (?, ?, ?, ?)", (b_id, code, name, testament))
 
     total_verses = 0
-    for code, book_info in json_data.items():
+    for code, book_info in bible_dict.items():
         norm_code = code.upper()[:3]
         if norm_code not in CODE_TO_CANON:
             continue
@@ -85,7 +140,7 @@ def build_sqlite_from_json(json_data, output_path):
 
             for v_num_str in sorted(verses_dict.keys(), key=lambda x: int(x)):
                 v_num = int(v_num_str)
-                text = verses_dict[v_num_str].strip()
+                text = str(verses_dict[v_num_str]).strip()
                 if text:
                     cur.execute(
                         "INSERT INTO verses (book_id, chapter, verse, text_ta) VALUES (?, ?, ?, ?)",
@@ -102,7 +157,7 @@ def build_sqlite_from_json(json_data, output_path):
     conn.close()
     return total_verses
 
-# UI Tabs for flexibility
+# UI Setup
 tab1, tab2 = st.tabs(["Upload JSON File", "Upload USFM Files"])
 
 with tab1:
@@ -110,13 +165,13 @@ with tab1:
     json_file = st.file_uploader("Upload your JSON file", type=["json"], key="json_uploader")
 
     if json_file and st.button("Generate tamil_bible.db from JSON"):
-        with st.spinner("Processing JSON and indexing SQLite database..."):
+        with st.spinner("Processing JSON and generating SQLite database..."):
             bible_data = json.load(json_file)
             
             with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
                 tmp_path = tmp.name
 
-            total = build_sqlite_from_json(bible_data, tmp_path)
+            total = build_sqlite_from_dict(bible_data, tmp_path)
 
             with open(tmp_path, "rb") as f:
                 db_bytes = f.read()
@@ -132,62 +187,25 @@ with tab1:
 
 with tab2:
     st.subheader("Convert raw USFM files directly to SQLite")
-    usfm_files = st.file_uploader("Upload all .usfm / .SFM files", accept_multiple_files=True, type=["usfm", "sfm", "txt"], key="usfm_uploader")
+    usfm_files = st.file_uploader(
+        "Upload all .usfm / .SFM files", 
+        accept_multiple_files=True, 
+        type=["usfm", "sfm", "txt"], 
+        key="usfm_uploader"
+    )
 
     if usfm_files and st.button("Generate tamil_bible.db from USFM"):
         with st.spinner("Parsing USFM files..."):
-            intermediate_json = {}
+            intermediate_dict = {}
             for file in usfm_files:
                 raw_text = file.read().decode("utf-8", errors="ignore")
-                lines = raw_text.splitlines()
-                book_id = "UNKNOWN"
-                book_name = ""
-                chapters = {}
-                current_chapter, current_verse, current_text = None, None, []
-
-                def flush():
-                    nonlocal current_text
-                    if current_chapter and current_verse and current_text:
-                        chapters[current_chapter][current_verse] = clean_usfm_text("".join(current_text))
-                        current_text = []
-
-                for raw_line in lines:
-                    line = raw_line.strip()
-                    if not line:
-                        continue
-                    if line.startswith("\\id "):
-                        book_id = line.split()[1].upper()[:3]
-                    elif line.startswith("\\h ") or line.startswith("\\toc1 "):
-                        if not book_name:
-                            book_name = line.split(maxsplit=1)[1]
-                    elif line.startswith("\\c "):
-                        flush()
-                        match = re.match(r"\\c\s+(\d+)", line)
-                        if match:
-                            current_chapter = match.group(1)
-                            chapters[current_chapter] = {}
-                            current_verse = None
-                    elif line.startswith("\\v "):
-                        flush()
-                        match = re.match(r"\\v\s+(\d+)\s*(.*)", line)
-                        if match:
-                            current_verse = match.group(1)
-                            if match.group(2):
-                                current_text = [match.group(2)]
-                    elif current_verse is not None and not line.startswith("\\s") and not line.startswith("\\is"):
-                        if line.startswith("\\q") or line.startswith("\\p"):
-                            content_part = re.sub(r"^\\[a-zA-Z0-9]+\s*", "", line)
-                            if content_part:
-                                current_text.append(" " + content_part)
-                        elif not line.startswith("\\"):
-                            current_text.append(" " + line)
-                flush()
-                intermediate_json[book_id] = {"book_name": book_name, "chapters": chapters}
+                b_code, b_data = parse_single_usfm(raw_text)
+                intermediate_dict[b_code] = b_data
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
                 tmp_path = tmp.name
 
-            total = build_sqlite_from_json(intermediate_json, tmp_path)
+            total = build_sqlite_from_dict(intermediate_dict, tmp_path)
 
             with open(tmp_path, "rb") as f:
                 db_bytes = f.read()
