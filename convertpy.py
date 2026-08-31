@@ -94,19 +94,48 @@ def parse_single_usfm(raw_text):
 
     return book_id, {"book_name": book_name, "chapters": chapters}
 
+def normalize_json_format(bible_data):
+    """Normalize JSON to ensure it has the correct structure"""
+    normalized = {}
+    
+    for code, book_data in bible_data.items():
+        # Check if it's already in the correct format
+        if isinstance(book_data, dict) and "chapters" in book_data:
+            normalized[code] = book_data
+        else:
+            # If it's a flat structure, convert it
+            # Assume the data is in the form: {code: {chapter: {verse: text}}}
+            normalized[code] = {
+                "book_name": book_data.get("book_name", ""),
+                "chapters": {k: v for k, v in book_data.items() if k != "book_name" and isinstance(v, dict)}
+            }
+    
+    return normalized
+
 def merge_bible_dicts(dict_list):
     """Merge multiple bible dictionaries into one"""
     merged = {}
+    
     for bible_dict in dict_list:
-        for code, book_info in bible_dict.items():
+        # Normalize each dictionary first
+        normalized_dict = normalize_json_format(bible_dict)
+        
+        for code, book_info in normalized_dict.items():
+            if not isinstance(book_info, dict):
+                continue
+                
             if code not in merged:
                 merged[code] = book_info
             else:
                 # If book already exists, merge chapters
-                existing_chapters = merged[code].get("chapters", {})
-                new_chapters = book_info.get("chapters", {})
-                existing_chapters.update(new_chapters)
-                merged[code]["chapters"] = existing_chapters
+                if isinstance(merged[code], dict):
+                    existing_chapters = merged[code].get("chapters", {})
+                    new_chapters = book_info.get("chapters", {})
+                    
+                    if isinstance(existing_chapters, dict) and isinstance(new_chapters, dict):
+                        existing_chapters.update(new_chapters)
+                        merged[code]["chapters"] = existing_chapters
+    
     return merged
 
 def build_sqlite_from_dict(bible_dict, output_path):
@@ -145,6 +174,9 @@ def build_sqlite_from_dict(bible_dict, output_path):
 
     total_verses = 0
     for code, book_info in bible_dict.items():
+        if not isinstance(book_info, dict):
+            continue
+            
         norm_code = code.upper()[:3]
         if norm_code not in CODE_TO_CANON:
             continue
@@ -152,12 +184,26 @@ def build_sqlite_from_dict(bible_dict, output_path):
         book_id = CODE_TO_CANON[norm_code][0]
         chapters = book_info.get("chapters", {})
 
-        for ch_num_str in sorted(chapters.keys(), key=lambda x: int(x)):
-            ch_num = int(ch_num_str)
-            verses_dict = chapters[ch_num_str]
+        if not isinstance(chapters, dict):
+            continue
 
-            for v_num_str in sorted(verses_dict.keys(), key=lambda x: int(x)):
-                v_num = int(v_num_str)
+        for ch_num_str in sorted(chapters.keys(), key=lambda x: int(x) if str(x).isdigit() else 0):
+            try:
+                ch_num = int(ch_num_str)
+            except (ValueError, TypeError):
+                continue
+                
+            verses_dict = chapters[ch_num_str]
+            
+            if not isinstance(verses_dict, dict):
+                continue
+
+            for v_num_str in sorted(verses_dict.keys(), key=lambda x: int(x) if str(x).isdigit() else 0):
+                try:
+                    v_num = int(v_num_str)
+                except (ValueError, TypeError):
+                    continue
+                    
                 text = str(verses_dict[v_num_str]).strip()
                 if text:
                     cur.execute(
