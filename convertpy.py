@@ -9,160 +9,175 @@ st.set_page_config(page_title="Tamil Bible to SQLite Converter", layout="centere
 st.title("📖 Tamil Bible to SQLite (.db) Converter")
 
 CANON_ORDER = [
-    ("GEN", "ஆதியாகமம்", "OT"), ("EXO", "யாத்திராகமம்", "OT"), ("LEV", "லேவியராகமம்", "OT"),
-    ("NUM", "எண்ணாகமம்", "OT"), ("DEU", "உபாகமம்", "OT"), ("JOS", "யோசுவா", "OT"),
-    ("JDG", "நியாயாதிபதிகள்", "OT"), ("RUT", "ரூத்", "OT"), ("1SA", "1 சாமுவேல்", "OT"),
-    ("2SA", "2 சாமுவேல்", "OT"), ("1KI", "1 இராஜாக்கள்", "OT"), ("2KI", "2 இராஜாக்கள்", "OT"),
-    ("1CH", "1 நாளாகமம்", "OT"), ("2CH", "2 நாளாகமம்", "OT"), ("EZR", "எஸ்றா", "OT"),
-    ("NEH", "நெகேமியா", "OT"), ("EST", "எஸ்தர்", "OT"), ("JOB", "யோபு", "OT"),
-    ("PSA", "சங்கீதம்", "OT"), ("PRO", "நீதிமொழிகள்", "OT"), ("ECC", "பிரசங்கி", "OT"),
-    ("SNG", "உன்னதப்பாட்டு", "OT"), ("ISA", "ஏசாயா", "OT"), ("JER", "எரேமியா", "OT"),
-    ("LAM", "புலம்பல்", "OT"), ("EZK", "எசேக்கியேல்", "OT"), ("DAN", "தானியேல்", "OT"),
-    ("HOS", "ஓசியா", "OT"), ("JOL", "யோவேல்", "OT"), ("AMO", "ஆமோஸ்", "OT"),
-    ("OBA", "ஒபதியா", "OT"), ("JON", "யோனா", "OT"), ("MIC", "மீகா", "OT"),
-    ("NAM", "நாகூம்", "OT"), ("HAB", "அபகூக்", "OT"), ("ZEP", "செப்பனியா", "OT"),
-    ("HAG", "ஆகாய்", "OT"), ("ZEC", "சகரியா", "OT"), ("MAL", "மல்கியா", "OT"),
-    ("MAT", "மத்தேயு", "NT"), ("MRK", "மாற்கு", "NT"), ("LUK", "லூக்கா", "NT"),
-    ("JHN", "யோவான்", "NT"), ("ACT", "அப்போஸ்தலர்", "NT"), ("ROM", "ரோமர்", "NT"),
-    ("1CO", "1 கொரிந்தியர்", "NT"), ("2CO", "2 கொரிந்தியர்", "NT"), ("GAL", "கலாத்தியர்", "NT"),
-    ("EPH", "எபேசியர்", "NT"), ("PHP", "பிலிப்பியர்", "NT"), ("COL", "கொலோசெயர்", "NT"),
-    ("1TH", "1 தெசலோனிக்கேயர்", "NT"), ("2TH", "2 தெசலோனிக்கேயர்", "NT"),
-    ("1TI", "1 தீமோத்தேயு", "NT"), ("2TI", "2 தீமோத்தேயு", "NT"), ("TIT", "தீத்து", "NT"),
-    ("PHM", "பிலேமோன்", "NT"), ("HEB", "எபிரெயர்", "NT"), ("JAS", "யாக்கோபு", "NT"),
-    ("1PE", "1 பேதுரு", "NT"), ("2PE", "2 பேதுரு", "NT"), ("1JN", "1 யோவான்", "NT"),
-    ("2JN", "2 யோவான்", "NT"), ("3JN", "3 யோவான்", "NT"), ("JUD", "யூதா", "NT"),
-    ("REV", "வெளிப்படுத்தின விசேஷம்", "NT")
+    ("GEN", "ஆதியாகமம்", "Genesis", "OT"),
+    ("EXO", "யாத்திராகமம்", "Exodus", "OT"),
+    ("LEV", "லேவியராகமம்", "Leviticus", "OT"),
+    ("NUM", "எண்ணாகமம்", "Numbers", "OT"),
+    ("DEU", "உபாகமம்", "Deuteronomy", "OT"),
+    ("JOS", "யோசுவா", "Joshua", "OT"),
+    ("JDG", "நியாயாதிபதிகள்", "Judges", "OT"),
+    ("RUT", "ரூத்", "Ruth", "OT"),
+    ("1SA", "1 சாமுவேல்", "1 Samuel", "OT"),
+    ("2SA", "2 சாமுவேல்", "2 Samuel", "OT"),
+    ("1KI", "1 இராஜாக்கள்", "1 Kings", "OT"),
+    ("2KI", "2 இராஜாக்கள்", "2 Kings", "OT"),
+    ("1CH", "1 நாளாகமம்", "1 Chronicles", "OT"),
+    ("2CH", "2 நாளாகமம்", "2 Chronicles", "OT"),
+    ("EZR", "எஸ்றா", "Ezra", "OT"),
+    ("NEH", "நெகேமியா", "Nehemiah", "OT"),
+    ("EST", "எஸ்தர்", "Esther", "OT"),
+    ("JOB", "யோபு", "Job", "OT"),
+    ("PSA", "சங்கீதம்", "Psalms", "OT"),
+    ("PRO", "நீதிமொழிகள்", "Proverbs", "OT"),
+    ("ECC", "பிரசங்கி", "Ecclesiastes", "OT"),
+    ("SNG", "உன்னதப்பாட்டு", "Song of Solomon", "OT"),
+    ("ISA", "ஏசாயா", "Isaiah", "OT"),
+    ("JER", "எரேமியா", "Jeremiah", "OT"),
+    ("LAM", "புலம்பல்", "Lamentations", "OT"),
+    ("EZK", "எசேக்கியேல்", "Ezekiel", "OT"),
+    ("DAN", "தானியேல்", "Daniel", "OT"),
+    ("HOS", "ஓசியா", "Hosea", "OT"),
+    ("JOL", "யோவேல்", "Joel", "OT"),
+    ("AMO", "ஆமோஸ்", "Amos", "OT"),
+    ("OBA", "ஒபதியா", "Obadiah", "OT"),
+    ("JON", "யோனா", "Jonah", "OT"),
+    ("MIC", "மீகா", "Micah", "OT"),
+    ("NAM", "நாகூம்", "Nahum", "OT"),
+    ("HAB", "அபகூக்", "Habakkuk", "OT"),
+    ("ZEP", "செப்பனியா", "Zephaniah", "OT"),
+    ("HAG", "ஆகாய்", "Haggai", "OT"),
+    ("ZEC", "சகரியா", "Zechariah", "OT"),
+    ("MAL", "மல்கியா", "Malachi", "OT"),
+    ("MAT", "மத்தேயு", "Matthew", "NT"),
+    ("MRK", "மாற்கு", "Mark", "NT"),
+    ("LUK", "லூக்கா", "Luke", "NT"),
+    ("JHN", "யோவான்", "John", "NT"),
+    ("ACT", "அப்போஸ்தலர்", "Acts", "NT"),
+    ("ROM", "ரோமர்", "Romans", "NT"),
+    ("1CO", "1 கொரிந்தியர்", "1 Corinthians", "NT"),
+    ("2CO", "2 கொரிந்தியர்", "2 Corinthians", "NT"),
+    ("GAL", "கலாத்தியர்", "Galatians", "NT"),
+    ("EPH", "எபேசியர்", "Ephesians", "NT"),
+    ("PHP", "பிலிப்பியர்", "Philippians", "NT"),
+    ("COL", "கொலோசெயர்", "Colossians", "NT"),
+    ("1TH", "1 தெசலோனிக்கேயர்", "1 Thessalonians", "NT"),
+    ("2TH", "2 தெசலோனிக்கேயர்", "2 Thessalonians", "NT"),
+    ("1TI", "1 தீமோத்தேயு", "1 Timothy", "NT"),
+    ("2TI", "2 தீமோத்தேயு", "2 Timothy", "NT"),
+    ("TIT", "தீத்து", "Titus", "NT"),
+    ("PHM", "பிலேமோன்", "Philemon", "NT"),
+    ("HEB", "எபிரெயர்", "Hebrews", "NT"),
+    ("JAS", "யாக்கோபு", "James", "NT"),
+    ("1PE", "1 பேதுரு", "1 Peter", "NT"),
+    ("2PE", "2 பேதுரு", "2 Peter", "NT"),
+    ("1JN", "1 யோவான்", "1 John", "NT"),
+    ("2JN", "2 யோவான்", "2 John", "NT"),
+    ("3JN", "3 யோவான்", "3 John", "NT"),
+    ("JUD", "யூதா", "Jude", "NT"),
+    ("REV", "வெளிப்படுத்தின விசேஷம்", "Revelation", "NT")
 ]
 
-CODE_TO_CANON = {code: (idx + 1, name, test) for idx, (code, name, test) in enumerate(CANON_ORDER)}
+# Canonical lookup dictionaries
+NAME_TO_CANON = {}
+for idx, (code, ta_name, en_name, test) in enumerate(CANON_ORDER):
+    info = (idx + 1, code, ta_name, test)
+    NAME_TO_CANON[code.upper()] = info
+    NAME_TO_CANON[en_name.lower().replace(" ", "")] = info
+    NAME_TO_CANON[ta_name.strip().replace(" ", "")] = info
 
-def clean_usfm_text(raw_text):
+def clean_text(raw_text):
+    """Strips USFM remnants, extra spaces, and special artifacts."""
     clean = re.sub(r"\\f\s*\+.*?\s*\\f\*", "", raw_text)
     clean = re.sub(r"\\x\s*\+.*?\s*\\x\*", "", clean)
     clean = re.sub(r"\\[a-zA-Z0-9]+(\s+)?", " ", clean)
     return re.sub(r"\s+", " ", clean).strip()
 
-def parse_single_usfm(raw_text):
-    lines = raw_text.splitlines()
-    book_id = "UNKNOWN"
-    book_name = ""
-    chapters = {}
-    current_chapter = None
-    current_verse = None
-    current_text = []
-
-    for raw_line in lines:
-        line = raw_line.strip()
-        if not line:
-            continue
-
-        if line.startswith("\\id "):
-            book_id = line.split()[1].upper()[:3]
-        elif line.startswith("\\h ") or line.startswith("\\toc1 "):
-            if not book_name:
-                book_name = line.split(maxsplit=1)[1]
-        elif line.startswith("\\c "):
-            if current_chapter and current_verse and current_text:
-                chapters[current_chapter][current_verse] = clean_usfm_text("".join(current_text))
-                current_text = []
-
-            match = re.match(r"\\c\s+(\d+)", line)
-            if match:
-                current_chapter = match.group(1)
-                chapters[current_chapter] = {}
-                current_verse = None
-        elif line.startswith("\\v "):
-            if current_chapter and current_verse and current_text:
-                chapters[current_chapter][current_verse] = clean_usfm_text("".join(current_text))
-                current_text = []
-
-            match = re.match(r"\\v\s+(\d+)\s*(.*)", line)
-            if match:
-                current_verse = match.group(1)
-                if match.group(2):
-                    current_text = [match.group(2)]
-        elif current_verse is not None and not line.startswith("\\s") and not line.startswith("\\is"):
-            if line.startswith("\\q") or line.startswith("\\p"):
-                content_part = re.sub(r"^\\[a-zA-Z0-9]+\s*", "", line)
-                if content_part:
-                    current_text.append(" " + content_part)
-            elif not line.startswith("\\"):
-                current_text.append(" " + line)
-
-    if current_chapter and current_verse and current_text:
-        chapters[current_chapter][current_verse] = clean_usfm_text("".join(current_text))
-
-    return book_id, {"book_name": book_name, "chapters": chapters}
-
-def normalize_json_format(bible_data):
-    """Normalize JSON to ensure it has the correct structure"""
-    # Handle case where bible_data itself is not a dict
-    if not isinstance(bible_data, dict):
-        return {}
+def match_canonical_book(book_key, en_name="", ta_name=""):
+    """Finds canonical ID by matching code, English name, or Tamil name."""
+    clean_k = str(book_key).strip().upper()[:3]
+    if clean_k in NAME_TO_CANON:
+        return NAME_TO_CANON[clean_k]
     
-    normalized = {}
+    clean_en = str(en_name).strip().lower().replace(" ", "")
+    if clean_en in NAME_TO_CANON:
+        return NAME_TO_CANON[clean_en]
     
-    for code, book_data in bible_data.items():
-        # Skip if book_data is not a dict
-        if not isinstance(book_data, dict):
+    clean_ta = str(ta_name).strip().replace(" ", "")
+    if clean_ta in NAME_TO_CANON:
+        return NAME_TO_CANON[clean_ta]
+    
+    return None
+
+def normalize_bible_payload(json_objects):
+    """
+    Normalizes both format styles:
+    1. New Format: {"book": {"english": "...", "tamil": "..."}, "chapters": [{"chapter": "1", "verses": [...]}]}
+    2. Old Format: {"GEN": {"chapters": {"1": {"1": "text"}}}}
+    """
+    normalized = []
+
+    for item in json_objects:
+        # Check if item is a list of books or single book
+        if isinstance(item, list):
+            items_to_process = item
+        elif isinstance(item, dict) and "book" in item and "chapters" in item:
+            items_to_process = [item]
+        elif isinstance(item, dict):
+            # Key-based multi-book dictionary
+            for b_code, b_content in item.items():
+                canon_info = match_canonical_book(b_code)
+                if not canon_info:
+                    continue
+                book_id = canon_info[0]
+                chapters_dict = b_content.get("chapters", {})
+                for ch_str, v_dict in chapters_dict.items():
+                    try:
+                        ch_num = int(ch_str)
+                        for v_str, text_val in v_dict.items():
+                            v_num = int(v_str)
+                            txt = clean_text(str(text_val))
+                            if txt:
+                                normalized.append((book_id, ch_num, v_num, txt))
+                    except Exception:
+                        continue
             continue
-        
-        # Check if it's already in the correct format
-        if "chapters" in book_data:
-            normalized[code] = book_data
         else:
-            # If it's a flat structure, convert it
-            # Assume the data is in the form: {code: {chapter: {verse: text}}}
-            chapters = {
-                k: v for k, v in book_data.items() 
-                if k != "book_name" and isinstance(v, dict)
-            }
-            normalized[code] = {
-                "book_name": book_data.get("book_name", "") if isinstance(book_data.get("book_name"), str) else "",
-                "chapters": chapters
-            }
-    
+            continue
+
+        # Processing New Format List items
+        for book_obj in items_to_process:
+            if not isinstance(book_obj, dict):
+                continue
+            
+            book_meta = book_obj.get("book", {})
+            en_name = book_meta.get("english", "") if isinstance(book_meta, dict) else ""
+            ta_name = book_meta.get("tamil", "") if isinstance(book_meta, dict) else ""
+            
+            canon_info = match_canonical_book("", en_name=en_name, ta_name=ta_name)
+            if not canon_info:
+                continue
+            
+            book_id = canon_info[0]
+            chapters_list = book_obj.get("chapters", [])
+
+            for ch_entry in chapters_list:
+                try:
+                    ch_num = int(ch_entry.get("chapter", 0))
+                    verses_list = ch_entry.get("verses", [])
+                    for v_entry in verses_list:
+                        v_num = int(v_entry.get("verse", 0))
+                        txt = clean_text(str(v_entry.get("text", "")))
+                        if txt:
+                            normalized.append((book_id, ch_num, v_num, txt))
+                except Exception:
+                    continue
+
     return normalized
 
-def merge_bible_dicts(dict_list):
-    """Merge multiple bible dictionaries into one"""
-    merged = {}
-    
-    for bible_dict in dict_list:
-        # Handle case where bible_dict is not a dict
-        if not isinstance(bible_dict, dict):
-            continue
-        
-        # Normalize each dictionary first
-        normalized_dict = normalize_json_format(bible_dict)
-        
-        for code, book_info in normalized_dict.items():
-            if not isinstance(book_info, dict):
-                continue
-                
-            if code not in merged:
-                merged[code] = book_info
-            else:
-                # If book already exists, merge chapters
-                if isinstance(merged[code], dict):
-                    existing_chapters = merged[code].get("chapters", {})
-                    new_chapters = book_info.get("chapters", {})
-                    
-                    if isinstance(existing_chapters, dict) and isinstance(new_chapters, dict):
-                        existing_chapters.update(new_chapters)
-                        merged[code]["chapters"] = existing_chapters
-    
-    return merged
-
-def build_sqlite_from_dict(bible_dict, output_path):
-    # Handle case where bible_dict is not a dict
-    if not isinstance(bible_dict, dict):
-        return 0
-    
+def build_sqlite_db(verse_tuples, output_path):
     conn = sqlite3.connect(output_path)
     cur = conn.cursor()
 
-    # Storage optimization pragmas
     cur.execute("PRAGMA page_size = 4096;")
     cur.execute("PRAGMA auto_vacuum = FULL;")
     cur.execute("PRAGMA synchronous = OFF;")
@@ -188,174 +203,63 @@ def build_sqlite_from_dict(bible_dict, output_path):
         );
     """)
 
-    for code, name, testament in CANON_ORDER:
-        b_id = CODE_TO_CANON[code][0]
-        cur.execute("INSERT INTO books VALUES (?, ?, ?, ?)", (b_id, code, name, testament))
+    # Populate canonical order
+    for idx, (code, ta_name, en_name, test) in enumerate(CANON_ORDER):
+        cur.execute("INSERT INTO books VALUES (?, ?, ?, ?)", (idx + 1, code, ta_name, test))
 
-    total_verses = 0
-    for code, book_info in bible_dict.items():
-        if not isinstance(book_info, dict):
-            continue
-            
-        norm_code = code.upper()[:3]
-        if norm_code not in CODE_TO_CANON:
-            continue
-
-        book_id = CODE_TO_CANON[norm_code][0]
-        chapters = book_info.get("chapters", {})
-
-        if not isinstance(chapters, dict):
-            continue
-
-        for ch_num_str in sorted(chapters.keys(), key=lambda x: int(x) if str(x).isdigit() else 0):
-            try:
-                ch_num = int(ch_num_str)
-            except (ValueError, TypeError):
-                continue
-                
-            verses_dict = chapters[ch_num_str]
-            
-            if not isinstance(verses_dict, dict):
-                continue
-
-            for v_num_str in sorted(verses_dict.keys(), key=lambda x: int(x) if str(x).isdigit() else 0):
-                try:
-                    v_num = int(v_num_str)
-                except (ValueError, TypeError):
-                    continue
-                    
-                text = str(verses_dict[v_num_str]).strip()
-                if text:
-                    cur.execute(
-                        "INSERT INTO verses (book_id, chapter, verse, text_ta) VALUES (?, ?, ?, ?)",
-                        (book_id, ch_num, v_num, text)
-                    )
-                    total_verses += 1
-
+    # Bulk insert verses
+    cur.executemany(
+        "INSERT INTO verses (book_id, chapter, verse, text_ta) VALUES (?, ?, ?, ?)",
+        verse_tuples
+    )
     conn.commit()
 
-    # Create primary lookup index
     cur.execute("CREATE INDEX idx_book_chapter ON verses(book_id, chapter);")
     conn.commit()
 
-    # Reclaim unused allocation pages
     cur.execute("VACUUM;")
     conn.commit()
     conn.close()
 
-    return total_verses
+    return len(verse_tuples)
 
-# UI Setup
-tab1, tab2, tab3 = st.tabs(["Upload JSON File", "Upload Multiple JSON Files", "Upload USFM Files"])
+# Streamlit UI
+st.subheader("Convert Bible JSON files to Optimized SQLite (`tamil_bible.db`)")
+uploaded_files = st.file_uploader(
+    "Upload JSON file(s) (Single file or multiple book files supported)",
+    type=["json"],
+    accept_multiple_files=True
+)
 
-with tab1:
-    st.subheader("Convert `tamil_bible_combined.json` to Compact SQLite")
-    json_file = st.file_uploader("Upload your JSON file", type=["json"], key="json_uploader")
-
-    if json_file and st.button("Generate tamil_bible.db from JSON"):
-        with st.spinner("Compiling and shrinking SQLite database..."):
+if uploaded_files and st.button("Generate tamil_bible.db"):
+    with st.spinner("Processing Bible files and compiling SQLite database..."):
+        json_payloads = []
+        for file in uploaded_files:
             try:
-                bible_data = json.load(json_file)
-                
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
-                    tmp_path = tmp.name
-
-                total = build_sqlite_from_dict(bible_data, tmp_path)
-
-                with open(tmp_path, "rb") as f:
-                    db_bytes = f.read()
-                os.remove(tmp_path)
-
-                st.success(f"✅ Generated compact SQLite DB ({len(db_bytes) / (1024*1024):.2f} MB) with {total:,} verses!")
-                st.download_button(
-                    label="⬇️ Download Optimized tamil_bible.db",
-                    data=db_bytes,
-                    file_name="tamil_bible.db",
-                    mime="application/x-sqlite3"
-                )
+                data = json.load(file)
+                json_payloads.append(data)
             except Exception as e:
-                st.error(f"❌ Error: {e}")
+                st.error(f"Failed to parse {file.name}: {e}")
 
-with tab2:
-    st.subheader("Convert Multiple JSON Files to Single Compact SQLite")
-    st.write("Upload multiple JSON files to merge them into one database file.")
-    json_files = st.file_uploader(
-        "Upload multiple JSON files", 
-        accept_multiple_files=True, 
-        type=["json"], 
-        key="multi_json_uploader"
-    )
+        all_verses = normalize_bible_payload(json_payloads)
 
-    if json_files and st.button("Generate tamil_bible.db from Multiple JSON Files"):
-        with st.spinner("Loading and merging JSON files..."):
-            try:
-                bible_dicts = []
-                files_loaded = 0
-                
-                for json_file in json_files:
-                    bible_data = json.load(json_file)
-                    bible_dicts.append(bible_data)
-                    files_loaded += 1
-                
-                st.info(f"📂 Loaded {files_loaded} JSON file(s)")
-                
-                # Merge all dictionaries
-                merged_bible_data = merge_bible_dicts(bible_dicts)
-                
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
-                    tmp_path = tmp.name
+        if not all_verses:
+            st.error("No valid verses could be parsed from the uploaded JSON file(s).")
+        else:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
+                tmp_path = tmp.name
 
-                total = build_sqlite_from_dict(merged_bible_data, tmp_path)
+            total = build_sqlite_db(all_verses, tmp_path)
 
-                with open(tmp_path, "rb") as f:
-                    db_bytes = f.read()
-                os.remove(tmp_path)
+            with open(tmp_path, "rb") as f:
+                db_bytes = f.read()
+            os.remove(tmp_path)
 
-                st.success(f"✅ Generated compact SQLite DB ({len(db_bytes) / (1024*1024):.2f} MB) with {total:,} verses from {files_loaded} JSON file(s)!")
-                st.download_button(
-                    label="⬇️ Download Merged tamil_bible.db",
-                    data=db_bytes,
-                    file_name="tamil_bible.db",
-                    mime="application/x-sqlite3"
-                )
-            except json.JSONDecodeError as e:
-                st.error(f"❌ Error parsing JSON: {e}")
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
-
-with tab3:
-    st.subheader("Convert raw USFM files directly to Compact SQLite")
-    usfm_files = st.file_uploader(
-        "Upload all .usfm / .SFM files", 
-        accept_multiple_files=True, 
-        type=["usfm", "sfm", "txt"], 
-        key="usfm_uploader"
-    )
-
-    if usfm_files and st.button("Generate tamil_bible.db from USFM"):
-        with st.spinner("Parsing USFM files and building SQLite database..."):
-            try:
-                intermediate_dict = {}
-                for file in usfm_files:
-                    raw_text = file.read().decode("utf-8", errors="ignore")
-                    b_code, b_data = parse_single_usfm(raw_text)
-                    intermediate_dict[b_code] = b_data
-
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
-                    tmp_path = tmp.name
-
-                total = build_sqlite_from_dict(intermediate_dict, tmp_path)
-
-                with open(tmp_path, "rb") as f:
-                    db_bytes = f.read()
-                os.remove(tmp_path)
-
-                st.success(f"✅ Generated compact SQLite DB ({len(db_bytes) / (1024*1024):.2f} MB) with {total:,} verses!")
-                st.download_button(
-                    label="⬇️ Download Optimized tamil_bible.db",
-                    data=db_bytes,
-                    file_name="tamil_bible.db",
-                    mime="application/x-sqlite3"
-                )
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
+            size_mb = len(db_bytes) / (1024 * 1024)
+            st.success(f"✅ Generated compact SQLite DB ({size_mb:.2f} MB) with {total:,} verses!")
+            st.download_button(
+                label="⬇️ Download Optimized tamil_bible.db",
+                data=db_bytes,
+                file_name="tamil_bible.db",
+                mime="application/x-sqlite3"
+            )
