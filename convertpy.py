@@ -96,18 +96,30 @@ def parse_single_usfm(raw_text):
 
 def normalize_json_format(bible_data):
     """Normalize JSON to ensure it has the correct structure"""
+    # Handle case where bible_data itself is not a dict
+    if not isinstance(bible_data, dict):
+        return {}
+    
     normalized = {}
     
     for code, book_data in bible_data.items():
+        # Skip if book_data is not a dict
+        if not isinstance(book_data, dict):
+            continue
+        
         # Check if it's already in the correct format
-        if isinstance(book_data, dict) and "chapters" in book_data:
+        if "chapters" in book_data:
             normalized[code] = book_data
         else:
             # If it's a flat structure, convert it
             # Assume the data is in the form: {code: {chapter: {verse: text}}}
+            chapters = {
+                k: v for k, v in book_data.items() 
+                if k != "book_name" and isinstance(v, dict)
+            }
             normalized[code] = {
-                "book_name": book_data.get("book_name", ""),
-                "chapters": {k: v for k, v in book_data.items() if k != "book_name" and isinstance(v, dict)}
+                "book_name": book_data.get("book_name", "") if isinstance(book_data.get("book_name"), str) else "",
+                "chapters": chapters
             }
     
     return normalized
@@ -117,6 +129,10 @@ def merge_bible_dicts(dict_list):
     merged = {}
     
     for bible_dict in dict_list:
+        # Handle case where bible_dict is not a dict
+        if not isinstance(bible_dict, dict):
+            continue
+        
         # Normalize each dictionary first
         normalized_dict = normalize_json_format(bible_dict)
         
@@ -139,6 +155,10 @@ def merge_bible_dicts(dict_list):
     return merged
 
 def build_sqlite_from_dict(bible_dict, output_path):
+    # Handle case where bible_dict is not a dict
+    if not isinstance(bible_dict, dict):
+        return 0
+    
     conn = sqlite3.connect(output_path)
     cur = conn.cursor()
 
@@ -234,24 +254,27 @@ with tab1:
 
     if json_file and st.button("Generate tamil_bible.db from JSON"):
         with st.spinner("Compiling and shrinking SQLite database..."):
-            bible_data = json.load(json_file)
-            
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
-                tmp_path = tmp.name
+            try:
+                bible_data = json.load(json_file)
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
+                    tmp_path = tmp.name
 
-            total = build_sqlite_from_dict(bible_data, tmp_path)
+                total = build_sqlite_from_dict(bible_data, tmp_path)
 
-            with open(tmp_path, "rb") as f:
-                db_bytes = f.read()
-            os.remove(tmp_path)
+                with open(tmp_path, "rb") as f:
+                    db_bytes = f.read()
+                os.remove(tmp_path)
 
-            st.success(f"✅ Generated compact SQLite DB ({len(db_bytes) / (1024*1024):.2f} MB) with {total:,} verses!")
-            st.download_button(
-                label="⬇️ Download Optimized tamil_bible.db",
-                data=db_bytes,
-                file_name="tamil_bible.db",
-                mime="application/x-sqlite3"
-            )
+                st.success(f"✅ Generated compact SQLite DB ({len(db_bytes) / (1024*1024):.2f} MB) with {total:,} verses!")
+                st.download_button(
+                    label="⬇️ Download Optimized tamil_bible.db",
+                    data=db_bytes,
+                    file_name="tamil_bible.db",
+                    mime="application/x-sqlite3"
+                )
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
 
 with tab2:
     st.subheader("Convert Multiple JSON Files to Single Compact SQLite")
@@ -311,25 +334,28 @@ with tab3:
 
     if usfm_files and st.button("Generate tamil_bible.db from USFM"):
         with st.spinner("Parsing USFM files and building SQLite database..."):
-            intermediate_dict = {}
-            for file in usfm_files:
-                raw_text = file.read().decode("utf-8", errors="ignore")
-                b_code, b_data = parse_single_usfm(raw_text)
-                intermediate_dict[b_code] = b_data
+            try:
+                intermediate_dict = {}
+                for file in usfm_files:
+                    raw_text = file.read().decode("utf-8", errors="ignore")
+                    b_code, b_data = parse_single_usfm(raw_text)
+                    intermediate_dict[b_code] = b_data
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
-                tmp_path = tmp.name
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
+                    tmp_path = tmp.name
 
-            total = build_sqlite_from_dict(intermediate_dict, tmp_path)
+                total = build_sqlite_from_dict(intermediate_dict, tmp_path)
 
-            with open(tmp_path, "rb") as f:
-                db_bytes = f.read()
-            os.remove(tmp_path)
+                with open(tmp_path, "rb") as f:
+                    db_bytes = f.read()
+                os.remove(tmp_path)
 
-            st.success(f"✅ Generated compact SQLite DB ({len(db_bytes) / (1024*1024):.2f} MB) with {total:,} verses!")
-            st.download_button(
-                label="⬇️ Download Optimized tamil_bible.db",
-                data=db_bytes,
-                file_name="tamil_bible.db",
-                mime="application/x-sqlite3"
-            )
+                st.success(f"✅ Generated compact SQLite DB ({len(db_bytes) / (1024*1024):.2f} MB) with {total:,} verses!")
+                st.download_button(
+                    label="⬇️ Download Optimized tamil_bible.db",
+                    data=db_bytes,
+                    file_name="tamil_bible.db",
+                    mime="application/x-sqlite3"
+                )
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
