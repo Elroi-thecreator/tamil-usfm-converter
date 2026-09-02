@@ -10,6 +10,26 @@ st.set_page_config(page_title="Tamil + KJV Bible Database Merger", page_icon="�
 st.title("📖 Tamil + KJV Bible DB Merger")
 st.write("Upload your existing `tamil_bible.db` to merge public domain King James Version (KJV) text.")
 
+CANONICAL_BOOKS = [
+    "genesis", "exodus", "leviticus", "numbers", "deuteronomy",
+    "joshua", "judges", "ruth", "1 samuel", "2 samuel",
+    "1 kings", "2 kings", "1 chronicles", "2 chronicles", "ezra",
+    "nehemiah", "esther", "job", "psalms", "proverbs",
+    "ecclesiastes", "song of solomon", "isaiah", "jeremiah", "lamentations",
+    "ezekiel", "daniel", "hosea", "joel", "amos",
+    "obadiah", "jonah", "micah", "nahum", "habakkuk",
+    "zephaniah", "haggai", "zechariah", "malachi",
+    "matthew", "mark", "luke", "john", "acts",
+    "romans", "1 corinthians", "2 corinthians", "galatians", "ephesians",
+    "philippians", "colossians", "1 thessalonians", "2 thessalonians", "1 timothy",
+    "2 timothy", "titus", "philemon", "hebrews", "james",
+    "1 peter", "2 peter", "1 john", "2 john", "3 john",
+    "jude", "revelation"
+]
+BOOK_MAP = {name: i + 1 for i, name in enumerate(CANONICAL_BOOKS)}
+BOOK_MAP["psalm"] = 19
+BOOK_MAP["song of songs"] = 22
+
 uploaded_file = st.file_uploader("Choose your tamil_bible.db file", type=["db", "sqlite", "sqlite3"])
 
 if uploaded_file is not None:
@@ -23,105 +43,74 @@ if uploaded_file is not None:
         progress_bar = st.progress(0)
         status_text = st.empty()
 
-        # Step 1: Download verified flat KJV JSON
         status_text.text("1/4: Downloading KJV dataset...")
         progress_bar.progress(20)
 
-        # Flat, reliable KJV dataset: list of [{"book": 1, "chapter": 1, "verse": 1, "text": "..."}, ...]
-        primary_url = "https://raw.githubusercontent.com/jadenzaleski/bible-sqlite/master/KJV.json"
-        fallback_url = "https://raw.githubusercontent.com/scrollmapper/bible_databases/master/formats/json/KJV.json"
-
-        raw_data = None
-        for url in [primary_url, fallback_url]:
-            try:
-                req = urllib.request.Request(
-                    url,
-                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-                )
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    raw_data = json.loads(resp.read().decode("utf-8"))
-                if raw_data:
-                    break
-            except Exception:
-                continue
-
-        if not raw_data:
-            st.error("Failed to download KJV text from public mirrors. Please check network/firewall.")
+        # Download from a raw, flat cross-platform source
+        url = "https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json"
+        
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            st.error(f"Failed to fetch data: {e}")
             st.stop()
 
-        # Step 2: Open SQLite database & add text_en column
-        status_text.text("2/4: Checking database schema...")
+        status_text.text("2/4: Connecting to SQLite database...")
         progress_bar.progress(40)
 
         conn = sqlite3.connect(tmp_db_path)
         cursor = conn.cursor()
 
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='verses';")
-        if not cursor.fetchone():
-            st.error("Table 'verses' was not found in the uploaded database.")
-            conn.close()
-            st.stop()
-
         cursor.execute("PRAGMA table_info(verses);")
         columns = [col[1] for col in cursor.fetchall()]
-
         if "text_en" not in columns:
             cursor.execute("ALTER TABLE verses ADD COLUMN text_en TEXT;")
             conn.commit()
 
-        # Step 3: Universal verse extraction
         status_text.text("3/4: Parsing and populating KJV verses...")
         progress_bar.progress(60)
 
         parsed_verses = []
 
-        # Parser Type 1: Direct list of dicts [{"book": 1, "chapter": 1, "verse": 1, "text": "..."}, ...]
-        if isinstance(raw_data, list):
-            for row in raw_data:
-                if isinstance(row, dict):
-                    b = row.get("book") or row.get("book_id") or row.get("b")
-                    c = row.get("chapter") or row.get("c")
-                    v = row.get("verse") or row.get("v")
-                    t = row.get("text") or row.get("t")
+        # Thiago Bodruk KJV format: list of 66 book objects:
+        # [{"abbrev": "gn", "name": "Genesis", "chapters": [ ["In the beginning...", ...], ... ] }]
+        if isinstance(data, list):
+            for book_idx, book_obj in enumerate(data, start=1):
+                if isinstance(book_obj, dict) and "chapters" in book_obj:
+                    for ch_idx, chapter in enumerate(book_obj["chapters"], start=1):
+                        if isinstance(chapter, list):
+                            for v_idx, verse_text in enumerate(chapter, start=1):
+                                parsed_verses.append((str(verse_text).strip(), book_idx, ch_idx, v_idx))
+                elif isinstance(book_obj, dict) and ("book" in book_obj or "book_id" in book_obj):
+                    b = book_obj.get("book") or book_obj.get("book_id")
+                    c = book_obj.get("chapter")
+                    v = book_obj.get("verse")
+                    t = book_obj.get("text")
                     if b and c and v and t:
                         parsed_verses.append((str(t).strip(), int(b), int(c), int(v)))
 
-        # Parser Type 2: Scrollmapper SQL table dump format
-        elif isinstance(raw_data, dict) and "resultset" in raw_data:
-            rows = raw_data.get("resultset", {}).get("row", [])
-            for r in rows:
-                fields = r.get("field", [])
-                if len(fields) >= 5:
-                    parsed_verses.append((str(fields[4]).strip(), int(fields[1]), int(fields[2]), int(fields[3])))
-
-        # Parser Type 3: Dict of books {"Genesis": [[v1, v2], ...]} or {"1": {"1": {"1": "..."}}}
-        elif isinstance(raw_data, dict):
-            # Check if root has a wrapper key like "verses" or "bible"
-            candidate = raw_data.get("verses") or raw_data.get("bible") or raw_data
-            if isinstance(candidate, list):
-                for row in candidate:
-                    if isinstance(row, dict):
-                        b = row.get("book") or row.get("book_id")
-                        c = row.get("chapter")
-                        v = row.get("verse")
-                        t = row.get("text")
-                        if b and c and v and t:
-                            parsed_verses.append((str(t).strip(), int(b), int(c), int(v)))
-            elif isinstance(candidate, dict):
-                for b_idx, (b_key, chs) in enumerate(candidate.items(), start=1):
-                    book_id = int(b_key) if str(b_key).isdigit() else b_idx
-                    if isinstance(chs, dict):
-                        for c_key, v_map in chs.items():
-                            if isinstance(v_map, dict):
-                                for v_key, t_val in v_map.items():
-                                    parsed_verses.append((str(t_val).strip(), int(book_id), int(c_key), int(v_key)))
+        # Fallback dictionary recursive unpacker
+        elif isinstance(data, dict):
+            # If wrapped in a top-level key like "books" or "verses"
+            for key, val in data.items():
+                b_id = BOOK_MAP.get(str(key).strip().lower()) or (int(key) if str(key).isdigit() else None)
+                if b_id and isinstance(val, dict):
+                    for ch_key, verses in val.items():
+                        if isinstance(verses, dict):
+                            for v_key, t in verses.items():
+                                parsed_verses.append((str(t).strip(), b_id, int(ch_key), int(v_key)))
+                        elif isinstance(verses, list):
+                            for v_idx, t in enumerate(verses, start=1):
+                                parsed_verses.append((str(t).strip(), b_id, int(ch_key), v_idx))
 
         if not parsed_verses:
-            st.error(f"Could not parse payload structure. Detected root type: {type(raw_data).__name__}")
+            st.error(f"Keys found in payload: {list(data.keys())[:10] if isinstance(data, dict) else 'Not a dict'}")
             conn.close()
             st.stop()
 
-        # Batch update SQLite in a single transaction
+        # Batch update SQLite database
         cursor.executemany(
             "UPDATE verses SET text_en = ? WHERE book_id = ? AND chapter = ? AND verse = ?;",
             parsed_verses
@@ -129,7 +118,7 @@ if uploaded_file is not None:
         conn.commit()
         progress_bar.progress(85)
 
-        # Step 4: Verification sample
+        # Verification sample
         status_text.text("4/4: Verifying sample (John 3:16)...")
         cursor.execute(
             "SELECT book_id, chapter, verse, text_ta, text_en FROM verses WHERE book_id = 43 AND chapter = 3 AND verse = 16;"
@@ -140,7 +129,7 @@ if uploaded_file is not None:
         progress_bar.progress(100)
         status_text.empty()
 
-        st.success(f" Successfully merged {len(parsed_verses):,} KJV verses!")
+        st.success(f"Successfully processed and merged {len(parsed_verses):,} KJV verses!")
 
         if sample:
             st.markdown("### 🔍 Preview: John 3:16 (யோவான் 3:16)")
