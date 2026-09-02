@@ -10,32 +10,9 @@ st.set_page_config(page_title="Tamil + KJV Bible Database Merger", page_icon="�
 st.title("📖 Tamil + KJV Bible DB Merger")
 st.write("Upload your existing `tamil_bible.db` to merge public domain King James Version (KJV) text.")
 
-# 66 canonical books mapping to standard IDs (1 to 66)
-CANONICAL_BOOKS = [
-    "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy",
-    "Joshua", "Judges", "Ruth", "1 Samuel", "2 Samuel",
-    "1 Kings", "2 Kings", "1 Chronicles", "2 Chronicles", "Ezra",
-    "Nehemiah", "Esther", "Job", "Psalms", "Proverbs",
-    "Ecclesiastes", "Song of Solomon", "Isaiah", "Jeremiah", "Lamentations",
-    "Ezekiel", "Daniel", "Hosea", "Joel", "Amos",
-    "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk",
-    "Zephaniah", "Haggai", "Zechariah", "Malachi",
-    "Matthew", "Mark", "Luke", "John", "Acts",
-    "Romans", "1 Corinthians", "2 Corinthians", "Galatians", "Ephesians",
-    "Philippians", "Colossians", "1 Thessalonians", "2 Thessalonians", "1 Timothy",
-    "2 Timothy", "Titus", "Philemon", "Hebrews", "James",
-    "1 Peter", "2 Peter", "1 John", "2 John", "3 John",
-    "Jude", "Revelation"
-]
-BOOK_NAME_TO_ID = {name.lower(): i + 1 for i, name in enumerate(CANONICAL_BOOKS)}
-# Common name variations
-BOOK_NAME_TO_ID["psalm"] = 19
-BOOK_NAME_TO_ID["song of songs"] = 22
-
 uploaded_file = st.file_uploader("Choose your tamil_bible.db file", type=["db", "sqlite", "sqlite3"])
 
 if uploaded_file is not None:
-    # Save uploaded file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp:
         tmp.write(uploaded_file.read())
         tmp_db_path = tmp.name
@@ -46,33 +23,42 @@ if uploaded_file is not None:
         progress_bar = st.progress(0)
         status_text = st.empty()
 
-        # Step 1: Fetch reliable KJV data source
-        status_text.text("1/4: Downloading clean KJV dataset...")
+        # Step 1: Download verified flat KJV JSON
+        status_text.text("1/4: Downloading KJV dataset...")
         progress_bar.progress(20)
 
-        # Using aruljohn's clean 66-book JSON repository structure
-        url = "https://raw.githubusercontent.com/scrollmapper/bible_databases/master/formats/json/KJV.json"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        # Flat, reliable KJV dataset: list of [{"book": 1, "chapter": 1, "verse": 1, "text": "..."}, ...]
+        primary_url = "https://raw.githubusercontent.com/jadenzaleski/bible-sqlite/master/KJV.json"
+        fallback_url = "https://raw.githubusercontent.com/scrollmapper/bible_databases/master/formats/json/KJV.json"
 
-        try:
-            with urllib.request.urlopen(req) as response:
-                content = response.read().decode("utf-8")
-                raw_data = json.loads(content)
-        except Exception as e:
-            st.error(f"Failed to download KJV text: {e}")
+        raw_data = None
+        for url in [primary_url, fallback_url]:
+            try:
+                req = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    raw_data = json.loads(resp.read().decode("utf-8"))
+                if raw_data:
+                    break
+            except Exception:
+                continue
+
+        if not raw_data:
+            st.error("Failed to download KJV text from public mirrors. Please check network/firewall.")
             st.stop()
 
         # Step 2: Open SQLite database & add text_en column
-        status_text.text("2/4: Connecting to SQLite database & checking schema...")
+        status_text.text("2/4: Checking database schema...")
         progress_bar.progress(40)
 
         conn = sqlite3.connect(tmp_db_path)
         cursor = conn.cursor()
 
-        # Verify verses table exists
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='verses';")
         if not cursor.fetchone():
-            st.error("Table 'verses' not found in uploaded database!")
+            st.error("Table 'verses' was not found in the uploaded database.")
             conn.close()
             st.stop()
 
@@ -83,66 +69,68 @@ if uploaded_file is not None:
             cursor.execute("ALTER TABLE verses ADD COLUMN text_en TEXT;")
             conn.commit()
 
-        # Step 3: Parse and Populate (Universal parser)
-        status_text.text("3/4: Parsing and updating English verses...")
+        # Step 3: Universal verse extraction
+        status_text.text("3/4: Parsing and populating KJV verses...")
         progress_bar.progress(60)
 
-        parsed_verses = []  # list of tuples: (text_en, book_id, chapter, verse)
+        parsed_verses = []
 
-        # Format A: Scrollmapper structure {"resultset": {"row": [...]}}
-        if isinstance(raw_data, dict) and "resultset" in raw_data and "row" in raw_data["resultset"]:
-            rows = raw_data["resultset"]["row"]
-            for row in rows:
-                if isinstance(row, dict) and "field" in row:
-                    f = row["field"]
-                    if len(f) >= 5:
-                        parsed_verses.append((str(f[4]).strip(), int(f[1]), int(f[2]), int(f[3])))
+        # Parser Type 1: Direct list of dicts [{"book": 1, "chapter": 1, "verse": 1, "text": "..."}, ...]
+        if isinstance(raw_data, list):
+            for row in raw_data:
+                if isinstance(row, dict):
+                    b = row.get("book") or row.get("book_id") or row.get("b")
+                    c = row.get("chapter") or row.get("c")
+                    v = row.get("verse") or row.get("v")
+                    t = row.get("text") or row.get("t")
+                    if b and c and v and t:
+                        parsed_verses.append((str(t).strip(), int(b), int(c), int(v)))
 
-        # Format B: List of verse dicts
-        elif isinstance(raw_data, list):
-            for item in raw_data:
-                if isinstance(item, dict):
-                    b_id = item.get("book") or item.get("book_id") or item.get("b")
-                    ch = item.get("chapter") or item.get("c")
-                    v = item.get("verse") or item.get("v")
-                    txt = item.get("text") or item.get("t")
+        # Parser Type 2: Scrollmapper SQL table dump format
+        elif isinstance(raw_data, dict) and "resultset" in raw_data:
+            rows = raw_data.get("resultset", {}).get("row", [])
+            for r in rows:
+                fields = r.get("field", [])
+                if len(fields) >= 5:
+                    parsed_verses.append((str(fields[4]).strip(), int(fields[1]), int(fields[2]), int(fields[3])))
 
-                    if isinstance(b_id, str):
-                        b_id = BOOK_NAME_TO_ID.get(b_id.strip().lower(), None)
-
-                    if b_id and ch and v and txt:
-                        parsed_verses.append((str(txt).strip(), int(b_id), int(ch), int(v)))
-
-        # Format C: Dict of books {"Genesis": {"1": {"1": "In the beginning..."}}}
+        # Parser Type 3: Dict of books {"Genesis": [[v1, v2], ...]} or {"1": {"1": {"1": "..."}}}
         elif isinstance(raw_data, dict):
-            for book_key, chapters in raw_data.items():
-                b_id = BOOK_NAME_TO_ID.get(str(book_key).strip().lower(), None)
-                if not b_id and str(book_key).isdigit():
-                    b_id = int(book_key)
-
-                if b_id and isinstance(chapters, dict):
-                    for ch_key, verses in chapters.items():
-                        if isinstance(verses, dict):
-                            for v_key, txt in verses.items():
-                                parsed_verses.append((str(txt).strip(), int(b_id), int(ch_key), int(v_key)))
+            # Check if root has a wrapper key like "verses" or "bible"
+            candidate = raw_data.get("verses") or raw_data.get("bible") or raw_data
+            if isinstance(candidate, list):
+                for row in candidate:
+                    if isinstance(row, dict):
+                        b = row.get("book") or row.get("book_id")
+                        c = row.get("chapter")
+                        v = row.get("verse")
+                        t = row.get("text")
+                        if b and c and v and t:
+                            parsed_verses.append((str(t).strip(), int(b), int(c), int(v)))
+            elif isinstance(candidate, dict):
+                for b_idx, (b_key, chs) in enumerate(candidate.items(), start=1):
+                    book_id = int(b_key) if str(b_key).isdigit() else b_idx
+                    if isinstance(chs, dict):
+                        for c_key, v_map in chs.items():
+                            if isinstance(v_map, dict):
+                                for v_key, t_val in v_map.items():
+                                    parsed_verses.append((str(t_val).strip(), int(book_id), int(c_key), int(v_key)))
 
         if not parsed_verses:
-            st.error("Could not parse KJV JSON data structure. Please verify the source.")
+            st.error(f"Could not parse payload structure. Detected root type: {type(raw_data).__name__}")
             conn.close()
             st.stop()
 
-        # Batch execute updates inside a single transaction
+        # Batch update SQLite in a single transaction
         cursor.executemany(
             "UPDATE verses SET text_en = ? WHERE book_id = ? AND chapter = ? AND verse = ?;",
             parsed_verses
         )
         conn.commit()
-        updated_count = len(parsed_verses)
-
         progress_bar.progress(85)
 
-        # Step 4: Verification sample (John 3:16)
-        status_text.text("4/4: Verifying sample...")
+        # Step 4: Verification sample
+        status_text.text("4/4: Verifying sample (John 3:16)...")
         cursor.execute(
             "SELECT book_id, chapter, verse, text_ta, text_en FROM verses WHERE book_id = 43 AND chapter = 3 AND verse = 16;"
         )
@@ -152,14 +140,13 @@ if uploaded_file is not None:
         progress_bar.progress(100)
         status_text.empty()
 
-        st.success(f"Successfully processed and merged {updated_count:,} KJV verses!")
+        st.success(f" Successfully merged {len(parsed_verses):,} KJV verses!")
 
         if sample:
             st.markdown("### 🔍 Preview: John 3:16 (யோவான் 3:16)")
             st.write(f"**Tamil:** {sample[3]}")
             st.write(f"**English (KJV):** {sample[4]}")
 
-        # Read back merged DB for download
         with open(tmp_db_path, "rb") as fp:
             db_bytes = fp.read()
 
