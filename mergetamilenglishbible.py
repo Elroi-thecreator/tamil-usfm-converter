@@ -46,13 +46,14 @@ if uploaded_file is not None:
         status_text.text("1/4: Downloading KJV dataset...")
         progress_bar.progress(20)
 
-        # Download from a raw, flat cross-platform source
         url = "https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json"
         
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+                # Decoded with utf-8-sig to automatically strip BOM
+                raw_text = resp.read().decode("utf-8-sig")
+                data = json.loads(raw_text)
         except Exception as e:
             st.error(f"Failed to fetch data: {e}")
             st.stop()
@@ -74,8 +75,7 @@ if uploaded_file is not None:
 
         parsed_verses = []
 
-        # Thiago Bodruk KJV format: list of 66 book objects:
-        # [{"abbrev": "gn", "name": "Genesis", "chapters": [ ["In the beginning...", ...], ... ] }]
+        # Thiago Bodruk KJV format: list of 66 books
         if isinstance(data, list):
             for book_idx, book_obj in enumerate(data, start=1):
                 if isinstance(book_obj, dict) and "chapters" in book_obj:
@@ -91,9 +91,8 @@ if uploaded_file is not None:
                     if b and c and v and t:
                         parsed_verses.append((str(t).strip(), int(b), int(c), int(v)))
 
-        # Fallback dictionary recursive unpacker
+        # Fallback dictionary unpacker
         elif isinstance(data, dict):
-            # If wrapped in a top-level key like "books" or "verses"
             for key, val in data.items():
                 b_id = BOOK_MAP.get(str(key).strip().lower()) or (int(key) if str(key).isdigit() else None)
                 if b_id and isinstance(val, dict):
@@ -106,7 +105,7 @@ if uploaded_file is not None:
                                 parsed_verses.append((str(t).strip(), b_id, int(ch_key), v_idx))
 
         if not parsed_verses:
-            st.error(f"Keys found in payload: {list(data.keys())[:10] if isinstance(data, dict) else 'Not a dict'}")
+            st.error("Could not parse verse data from downloaded file.")
             conn.close()
             st.stop()
 
@@ -118,7 +117,7 @@ if uploaded_file is not None:
         conn.commit()
         progress_bar.progress(85)
 
-        # Verification sample
+        # Verification sample (John 3:16)
         status_text.text("4/4: Verifying sample (John 3:16)...")
         cursor.execute(
             "SELECT book_id, chapter, verse, text_ta, text_en FROM verses WHERE book_id = 43 AND chapter = 3 AND verse = 16;"
